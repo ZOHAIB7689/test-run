@@ -6,7 +6,7 @@ sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 import streamlit as st
 import os
 import re
-from typing import Optional, Tuple
+from typing import Optional, Tuple,Dict
 from crewai import Agent, Task, Crew, Process
 from litellm import completion
 import logging
@@ -31,6 +31,7 @@ class GeminiModelProvider:
             "gemini/gemini-1.5-pro": "Google Gemini 1.5 Pro"
         }
 
+
 class IslamicKnowledgeCrewManager:
     """Manages CrewAI implementation for Islamic knowledge search"""
     
@@ -39,6 +40,7 @@ class IslamicKnowledgeCrewManager:
         self.selected_model = selected_model
         
     def _create_research_agent(self, role: str, goal: str) -> Agent:
+        """Creates a generic research agent"""
         return Agent(
             role=role,
             goal=goal,
@@ -47,7 +49,9 @@ class IslamicKnowledgeCrewManager:
         )
     
     def execute_research(self, query: str, language: str) -> Tuple[str, Optional[str]]:
+        """Execute research process using CrewAI"""
         try:
+            # Create agents
             quran_researcher = self._create_research_agent(
                 "Quranic Scholar",
                 "Find relevant Quranic verses with explanations"
@@ -58,6 +62,7 @@ class IslamicKnowledgeCrewManager:
                 "Identify authentic hadith with proper citations"
             )
 
+            # Create tasks
             tasks = [
                 Task(
                     description=f"Research Quranic verses for: {query}",
@@ -81,16 +86,19 @@ class IslamicKnowledgeCrewManager:
             result = crew.kickoff()
             formatted_result = self._format_results(result, language)
             related = self._generate_related_questions(query)
+            
             return (formatted_result, related)
         except Exception as e:
             logger.error(f"CrewAI Error: {str(e)}")
             return self._fallback_search(query, language)
 
     def _generate_related_questions(self, query: str) -> Optional[str]:
+        """Generate related questions using Gemini"""
         prompt = f"Generate 3 related Islamic questions for: {query}"
         return self._safe_api_call([{"role": "user", "content": prompt}])
 
     def _safe_api_call(self, messages: list, retries: int = 3) -> Optional[str]:
+        """API call with error handling"""
         for attempt in range(retries):
             try:
                 response = completion(
@@ -104,17 +112,35 @@ class IslamicKnowledgeCrewManager:
                 logger.error(f"API Error (Attempt {attempt+1}): {str(e)}")
                 return None
 
-    def _format_results(self, results: str, language: str) -> str:
+    def _format_results(self, results: Dict, language: str) -> str:
+        """Format results into structured response"""
         sections = {
-            "English": ["## 📖 Quranic References", "## 📚 Authentic Hadith"],
-            "Urdu": ["## 📖 قرآنی حوالہ جات", "## 📚 صحیح حدیث"]
+            "English": {
+                "quran": "## 📖 Quranic References",
+                "hadith": "## 📚 Authentic Hadith",
+                "guidance": "## 💡 Practical Guidance"
+            },
+            "Urdu": {
+                "quran": "## 📖 قرآنی حوالہ جات",
+                "hadith": "## 📚 صحیح حدیث",
+                "guidance": "## 💡 عملی رہنمائی"
+            }
         }
-        formatted_response = re.sub(r'(```arabic)(.*?)(```)', 
-                        r'<div dir="rtl" class="arabic-text">\2</div>', 
-                        results, flags=re.DOTALL)
-        return formatted_response
+        
+        formatted_response = ""
+        try:
+            formatted_response += f"{sections[language]['quran']}\n{results.get('quranic_research', '')}\n\n"
+            formatted_response += f"{sections[language]['hadith']}\n{results.get('hadith_research', '')}\n\n"
+            formatted_response = re.sub(r'(```arabic)(.*?)(```)', 
+                            r'<div dir="rtl" class="arabic-text">\2</div>', 
+                            formatted_response, flags=re.DOTALL)
+            return formatted_response
+        except Exception as e:
+            logger.error(f"Format Error: {str(e)}")
+            return "Error formatting results."
 
     def _fallback_search(self, query: str, language: str) -> Tuple[str, Optional[str]]:
+        """Fallback direct Gemini call"""
         finder = IslamicKnowledgeFinder(self.selected_model)
         return finder.search_islamic_knowledge(query, language)
 
@@ -125,6 +151,7 @@ class IslamicKnowledgeFinder:
         self.api_key = os.getenv("GEMINI_API_KEY")
 
     def search_islamic_knowledge(self, query: str, language: str) -> Tuple[str, Optional[str]]:
+        """Direct search using Gemini"""
         prompt = f"""
         Provide Islamic guidance for: '{query}'
         Include Quranic verses, authentic hadith, and practical guidance.
@@ -151,10 +178,10 @@ class IslamicKnowledgeFinder:
             return ("Error processing request", None)
 
     def _format_response(self, response: str, language: str) -> str:
-        return re.sub(r'(```arabic)(.*?)(```)', 
-                    r'<div dir="rtl" class="arabic-text">\2</div>', 
-                    response, flags=re.DOTALL)
-
+        response = re.sub(r'(```arabic)(.*?)(```)', 
+                        r'<div dir="rtl" class="arabic-text">\2</div>', 
+                        response, flags=re.DOTALL)
+        return response
 # Session Management
 def initialize_session():
     defaults = {
@@ -210,7 +237,7 @@ def display_search_interface():
         if st.button("🔍 Search", type="primary") and query.strip():
             st.session_state.current_query = query
             st.session_state.search_in_progress = True
-            st.experimental_rerun()
+            st.rerun()  # Corrected here
 
 def display_result(response: str, related: str):
     if st.session_state.search_in_progress:
@@ -229,7 +256,7 @@ def display_result(response: str, related: str):
         for q in related.split('\n')[:3]:
             if q.strip() and st.button(q.strip()):
                 st.session_state.current_query = q.strip()
-                st.experimental_rerun()
+                st.rerun()  # Corrected here
 
 def main():
     st.set_page_config(
