@@ -26,6 +26,10 @@ class GeminiModelProvider:
     """Handles Gemini model integration"""
     def __init__(self):
         self.api_key = os.getenv("GEMINI_API_KEY")
+        if not self.api_key:
+            raise ValueError("GEMINI_API_KEY not found in environment variables")
+        if not self.api_key.startswith("AIza"):
+            raise ValueError("Invalid GEMINI_API_KEY format")
         self.available_models = {
             "gemini/gemini-2.0-flash": "Google Gemini 2.0 Flash",
             "gemini/gemini-1.5-pro": "Google Gemini 1.5 Pro"
@@ -149,6 +153,10 @@ class IslamicKnowledgeFinder:
     def __init__(self, model_name: str = "gemini/gemini-2.0-flash"):
         self.model_name = model_name
         self.api_key = os.getenv("GEMINI_API_KEY")
+        if not self.api_key:
+            raise ValueError("GEMINI_API_KEY not found in environment variables")
+        if not self.api_key.startswith("AIza"):
+            raise ValueError("Invalid GEMINI_API_KEY format")
 
     def search_islamic_knowledge(self, query: str, language: str) -> Tuple[str, Optional[str]]:
         """Direct search using Gemini"""
